@@ -4,6 +4,8 @@
 #include <vector>
 #include "SceneObject.h"
 #include "Material.h"
+#include <chrono>
+#include <ctime>
 
 Renderer::Renderer(int w, int h, int minDepth, int maxDepth, int samplePerPixel)
     : mViewportWidth(w), mViewportHeight(h), mBuffer(nullptr),
@@ -27,16 +29,101 @@ Renderer::Renderer(int w, int h, int minDepth, int maxDepth, int samplePerPixel)
 
 	//auto pMaterial = mScene->CreateMaterial<LambertMaterial>("Red", Color(1.0f, 0.0f, 0.0f));
 	//SceneObject* obj1 = mScene->CreateSceneObject(Vector3f(0.5, 1.5, 1.5), Vector3f(0, 0, 0), 1.0f);
-	SceneObject* obj2 = mScene->CreateSceneObject(Vector3f(-0.5, 0.5, 1), Vector3f(0, 0, 0), 1.0f);
-    /*obj1->CreatePrimitive<Sphere>(0.2f);
-	obj1->SetMaterial(mScene->CreateMaterial<LambertMaterial>("Red", Color(1.0f, 0.0f, 0.0f)));*/
-    obj2->CreatePrimitive<Sphere>(0.6f);
-	//obj2->SetMaterial(mScene->CreateMaterial<ConductorSpecularMaterial>("white", Color(1.5f, 1.5f, 1.5f), Color(3.0f, 3.0f, 3.0f), Color(1.0f, 1.0f, 1.0f)));
-    obj2->SetMaterial(mScene->CreateMaterial<DielectricSpecularMaterial>("white",1.5f,Color(1.0f, 1.0f, 1.0f)));
-    SceneObject* obj3 = mScene->CreateSceneObject(Vector3f(0.5, 0.5, 1), Vector3f(0, 0, 0), 1.0f);
-    obj3->CreatePrimitive<Sphere>(0.3f);
-	obj3->SetEmission(Color(10.0f, 10.0f, 10.0f));
-	obj3->SetMaterial(mScene->CreateMaterial<LambertMaterial>("White", Color(1.0f, 1.0f, 1.0f)));
+	//SceneObject* obj2 = mScene->CreateSceneObject(Vector3f(-0.5, 0.5, 1), Vector3f(0, 0, 0), 1.0f);
+ //   /*obj1->CreatePrimitive<Sphere>(0.2f);
+	//obj1->SetMaterial(mScene->CreateMaterial<LambertMaterial>("Red", Color(1.0f, 0.0f, 0.0f)));*/
+ //   obj2->CreatePrimitive<Sphere>(0.6f);
+	////obj2->SetMaterial(mScene->CreateMaterial<ConductorSpecularMaterial>("white", Color(1.5f, 1.5f, 1.5f), Color(3.0f, 3.0f, 3.0f), Color(1.0f, 1.0f, 1.0f)));
+ //   obj2->SetMaterial(mScene->CreateMaterial<DielectricSpecularMaterial>("white",1.5f,Color(1.0f, 1.0f, 1.0f)));
+ //   SceneObject* obj3 = mScene->CreateSceneObject(Vector3f(0.5, 0.5, 1), Vector3f(0, 0, 0), 1.0f);
+ //   obj3->CreatePrimitive<Sphere>(0.3f);
+	//obj3->SetEmission(Color(10.0f, 10.0f, 10.0f));
+	//obj3->SetMaterial(mScene->CreateMaterial<LambertMaterial>("White", Color(1.0f, 1.0f, 1.0f)));
+
+    std::vector<Material*> palette;
+    palette.push_back(mScene->CreateMaterial<LambertMaterial>("BallA", Color(0.9f, 0.2f, 0.2f)));
+    palette.push_back(mScene->CreateMaterial<LambertMaterial>("BallB", Color(0.2f, 0.9f, 0.2f)));
+    palette.push_back(mScene->CreateMaterial<LambertMaterial>("BallC", Color(0.2f, 0.2f, 0.9f)));
+    palette.push_back(mScene->CreateMaterial<LambertMaterial>("BallD", Color(0.85f, 0.85f, 0.85f)));
+    palette.push_back(mScene->CreateMaterial<LambertMaterial>("BallE", Color(0.9f, 0.7f, 0.2f)));
+
+    struct Ball { Vector3f c; float r; };
+    std::vector<Ball> placed = {
+        { Vector3f(-0.5f, 0.5f, 1.0f), 0.6f },
+        { Vector3f(0.5f, 0.5f, 1.0f), 0.3f }
+    };
+    const int testBallCount = 500;              // ← 调这个数控制压力：100 / 500 / 2000
+    int created = 0, attempts = 0;
+    while (created < testBallCount && attempts < testBallCount * 50)
+    {
+        ++attempts;
+        float r = Random(0.08f, 0.22f);         // 随机半径
+        Vector3f c(Random(-1.7f, 1.7f), r, Random(-1.7f, 1.3f));  // 放在地面上（y=r）
+
+        // 拒绝采样：和已有球保持距离
+        bool ok = true;
+        for (const Ball& b : placed)
+        {
+            if (glm::length(c - b.c) < r + b.r + 0.05f) { ok = false; break; }
+        }
+        if (!ok) continue;
+
+        placed.push_back({ c, r });
+        SceneObject* ball = mScene->CreateSceneObject(c, Vector3f(0, 0, 0), 1.0f);
+        ball->CreatePrimitive<Sphere>(r);
+        ball->SetMaterial(palette[created % palette.size()]);
+        ++created;
+    }
+    std::cout << "Placed " << created << " test spheres ("
+        << (10 + 2 + created) << " primitives total)." << std::endl;
+
+    // ========== 随机圆盘（像撒硬币一样铺在地面/漂浮） ==========
+    const int testDiskCount = 100;
+    for (int i = 0; i < testDiskCount; ++i)
+    {
+        float radius = Random(0.15f, 0.35f);
+
+        Vector3f pos, euler;
+        if (i % 2 == 0)
+        {
+            // 一半：平躺在地面上（局部法线 +z → 绕X转-90° 朝向 +y）
+            pos = Vector3f(Random(-1.7f, 1.7f), 0.01f, Random(-1.7f, 1.3f));
+            euler = Vector3f(glm::radians(-90.0f), 0.0f, Random(0.0f, 2.0f * PI)); // 随机朝向
+        }
+        else
+        {
+            // 一半：随机方向漂浮在空中
+            pos = Vector3f(Random(-1.7f, 1.7f), Random(0.5f, 3.5f), Random(-1.7f, 1.3f));
+            euler = Vector3f(Random(0.0f, PI), Random(0.0f, PI), Random(0.0f, PI));
+        }
+
+        SceneObject* diskObj = mScene->CreateSceneObject(pos, euler, 1.0f);
+        diskObj->CreatePrimitive<Disk>(radius);
+        diskObj->SetMaterial(palette[i % palette.size()]);
+    }
+
+    // ========== 随机三角形（全部挂在一个对象上，集中压测图元数量） ==========
+    const int testTriCount = 200;
+    SceneObject* triHost = mScene->CreateSceneObject(Vector3f(0, 0, 0), Vector3f(0, 0, 0), 1.0f);
+    triHost->SetMaterial(mScene->CreateMaterial<LambertMaterial>("BallF", Color(0.5f, 0.5f, 0.9f)));
+    for (int i = 0; i < testTriCount; ++i)
+    {
+        // 在小立方体内随机取三个点构成三角形
+        Vector3f center(Random(-1.7f, 1.7f), Random(0.3f, 3.7f), Random(-1.7f, 1.3f));
+        float s = Random(0.1f, 0.3f);
+        Vector3f v0 = center + Vector3f(Random(-s, s), Random(-s, s), Random(-s, s));
+        Vector3f v1 = center + Vector3f(Random(-s, s), Random(-s, s), Random(-s, s));
+        Vector3f v2 = center + Vector3f(Random(-s, s), Random(-s, s), Random(-s, s));
+
+        triHost->CreatePrimitive<Triangle>(v0, v1, v2);
+    }
+    
+    std::cout << "Placed " << created << " spheres, " << testDiskCount
+        << " disks, " << testTriCount << " triangles ("
+        << (10 + 2 + created + testDiskCount + testTriCount)
+        << " primitives total)." << std::endl;
+
+    mScene->BuildAccelerationStructure();
 }
 
 void Renderer::CreateCornellBox()
@@ -283,11 +370,12 @@ void Renderer::Run()
     //视口上每个像素点的颜色，格式为0xAARRGGBB
     mBuffer = (uint32_t*)malloc(mViewportWidth * mViewportHeight * 4);
 
-    std::thread renderThread(&Renderer::RunRenderThread, this);
-	renderThread.detach();
+    /*std::thread renderThread(&Renderer::RunRenderThread, this);
+	renderThread.detach();*/
 
 	int numThreads = std::thread::hardware_concurrency();
 	std::vector<std::thread> renderThreads(numThreads - 1);
+	std::cout << "Using " << numThreads << " threads for rendering." << std::endl;
     for(int i = 0; i < numThreads - 1; ++i)
     {
         renderThreads[i] = std::thread(&Renderer::RunRenderThread, this);
@@ -424,8 +512,11 @@ Color Renderer::GetRadiance(const Ray& ray, int depth, bool bPrevIsSpecular)
             shadowRay.mint = 1e-4f; //避免自相交
             shadowRay.maxt = glm::length(sourcePos - isect.position) - 1e-3f;
 
-            Intersection shadow_isect;
-            if (mScene->Intersect(shadowRay, shadow_isect)) //如果有遮挡，说明该点在阴影中
+            //Intersection shadow_isect;
+            //if (mScene->Intersect(shadowRay, shadow_isect)) //如果有遮挡，说明该点在阴影中
+            //    continue;
+
+            if (mScene->Occluded(shadowRay)) //如果有遮挡，说明该点在阴影中
                 continue;
 
             Vector3f wi = worldToLocal * shadowRay.d; //入射方向，局部空间
@@ -472,9 +563,16 @@ Color Renderer::GetRadiance(const Ray& ray, int depth, bool bPrevIsSpecular)
 void Renderer::RunRenderThread()
 {
     //读取当前屏幕的下一个像素
-    while (true)
+    auto start = std::chrono::steady_clock::now();
+    auto now = std::chrono::system_clock::now();
+    std::time_t t = std::chrono::system_clock::to_time_t(now);
+    char buf[26];  // ctime_s 的缓冲区至少 26 字节
+    ctime_s(buf, sizeof(buf), &t);
+    std::cout << buf;   // buf 自带换行
+    int pixelIndex = 0;
+    while (pixelIndex < mViewportWidth * mViewportHeight)
     {
-		int pixelIndex = mCurrentPixelIndex.fetch_add(1);
+		pixelIndex = mCurrentPixelIndex.fetch_add(1);
         if(pixelIndex >= mViewportWidth * mViewportHeight)
             break;
 
@@ -487,5 +585,8 @@ void Renderer::RunRenderThread()
         uint32_t b = glm::clamp((uint32_t)std::round(color.b * 255.0f), 0u, 255u);
 		mBuffer[y * mViewportWidth + x] = (r << 16) | (g << 8) | b;
     }
+    auto end = std::chrono::steady_clock::now();
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "Render time: " << ms.count() << " ms" << std::endl;
 }
 

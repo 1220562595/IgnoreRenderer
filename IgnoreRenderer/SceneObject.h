@@ -26,6 +26,8 @@ public:
 		return primitive;
 	}
 
+	std::vector<Primitive*> GetPrimitives() const { return mPrimitives; }
+
 	Matrix4x4 GetObjectToWorld() const { return mObjectToWorld; }
 	Matrix4x4 GetWorldToObject() const { return mWorldToObject; }
 

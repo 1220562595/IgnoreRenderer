@@ -3,6 +3,7 @@
 #include "Camera.h"
 #include "Light.h"
 #include <map>
+#include "BVH.h"
 
 class Scene
 {
@@ -34,10 +35,16 @@ public:
 
 	const std::vector<Light*>& GetLights() const { return mLights; }
 
+	void BuildAccelerationStructure();   // 场景建完后调用一次
+	bool Occluded(const Ray& ray) const;
+
 private:
 	Camera mCamera;
 	std::vector<SceneObject*> mSceneObjects;
 	std::vector<Light*> mLights;
 	std::map<std::string, Material*> mMaterials;
+
+	BVH mBVH;
+	bool mBVHBuilt = false;
 };
 
