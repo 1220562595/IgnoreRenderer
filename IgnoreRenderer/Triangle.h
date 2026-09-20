@@ -1,5 +1,6 @@
 #pragma once
 #include "Primitive.h"
+#include "SceneObject.h"
 
 class Triangle : public Primitive
 {
@@ -9,6 +10,15 @@ public:
 	virtual bool Intersect(const Ray& ray, Intersection& isect) const override;
 
 	virtual void Sample(Vector3f& p, Vector3f& normal, float& pdf) const override;
+
+	AABB GetWorldBounds() const override
+	{
+		AABB box;
+		box.Expand(mVertices[0]);
+		box.Expand(mVertices[1]);
+		box.Expand(mVertices[2]);
+		return box;
+	}
 
 private:
 	Vector3f mVertices[3]; //三角形的三个顶点
